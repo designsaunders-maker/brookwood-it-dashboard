@@ -171,7 +171,23 @@
 
 <div id="footer">
   <span id="doc-count"></span>
+  <div style="display:flex;gap:8px;align-items:center;">
+    <button id="export-btn" onclick="exportData()" style="background:none;border:1px solid #d8d3ca;color:#888;padding:4px 12px;border-radius:20px;font-family:inherit;font-size:10px;font-weight:700;letter-spacing:0.05em;cursor:pointer;transition:all 0.15s;" onmouseover="this.style.borderColor='#aaa';this.style.color='#555'" onmouseout="this.style.borderColor='#d8d3ca';this.style.color='#888'">↑ EXPORT</button>
+    <button id="import-btn" onclick="showImport()" style="background:none;border:1px solid #d8d3ca;color:#888;padding:4px 12px;border-radius:20px;font-family:inherit;font-size:10px;font-weight:700;letter-spacing:0.05em;cursor:pointer;transition:all 0.15s;" onmouseover="this.style.borderColor='#aaa';this.style.color='#555'" onmouseout="this.style.borderColor='#d8d3ca';this.style.color='#888'">↓ IMPORT</button>
+  </div>
   <span>DRAG HEADER TO REORDER COLUMNS · DRAG CARD TO REORDER · CLICK EDIT TO UPDATE</span>
+</div>
+
+<div id="import-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.3);z-index:100;align-items:center;justify-content:center;">
+  <div style="background:#fff;border-radius:12px;padding:24px;width:480px;max-width:90vw;box-shadow:0 8px 32px rgba(0,0,0,0.15);">
+    <div style="font-family:'Syne',sans-serif;font-size:16px;font-weight:800;margin-bottom:8px;">Import Data</div>
+    <div style="font-size:12px;color:#888;margin-bottom:12px;line-height:1.5;">Paste your exported data below. This will <strong>replace</strong> all current cards and column order.</div>
+    <textarea id="import-text" style="width:100%;height:120px;background:#f9f7f4;border:1px solid #e0dbd2;border-radius:6px;padding:10px;font-family:inherit;font-size:11px;color:#444;resize:none;outline:none;" placeholder="Paste exported data here..."></textarea>
+    <div style="display:flex;gap:8px;margin-top:12px;">
+      <button onclick="doImport()" style="flex:1;background:#c0622f;color:#fff;border:none;padding:9px;border-radius:6px;font-family:inherit;font-weight:700;font-size:12px;cursor:pointer;">Import & Replace</button>
+      <button onclick="closeImport()" style="background:#f0ede8;color:#888;border:1px solid #e0dbd2;padding:9px 16px;border-radius:6px;font-family:inherit;font-size:12px;cursor:pointer;">Cancel</button>
+    </div>
+  </div>
 </div>
 
 <script>
@@ -635,6 +651,57 @@ function render() {
 
 function escHtml(str) {
   return (str || "").replace(/&/g,"&amp;").replace(/"/g,"&quot;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+}
+
+function exportData() {
+  const data = {
+    docs,
+    colOrder: CATEGORIES.map(c => c.id)
+  };
+  const json = JSON.stringify(data);
+  navigator.clipboard.writeText(json).then(() => {
+    const btn = document.getElementById("export-btn");
+    const orig = btn.textContent;
+    btn.textContent = "✓ COPIED!";
+    btn.style.color = "#1d7a57";
+    btn.style.borderColor = "#1d7a57";
+    setTimeout(() => { btn.textContent = orig; btn.style.color = "#888"; btn.style.borderColor = "#d8d3ca"; }, 2000);
+  });
+}
+
+function showImport() {
+  const modal = document.getElementById("import-modal");
+  modal.style.display = "flex";
+  document.getElementById("import-text").value = "";
+  document.getElementById("import-text").focus();
+}
+
+function closeImport() {
+  document.getElementById("import-modal").style.display = "none";
+}
+
+function doImport() {
+  try {
+    const raw = document.getElementById("import-text").value.trim();
+    const data = JSON.parse(raw);
+    if (!data.docs || !Array.isArray(data.docs)) throw new Error("Invalid format");
+    docs = data.docs;
+    if (data.colOrder) {
+      CATEGORIES = data.colOrder.map(id => CATEGORIES_DEFAULT.find(c => c.id === id)).filter(Boolean);
+      CATEGORIES_DEFAULT.forEach(c => { if (!CATEGORIES.find(x => x.id === c.id)) CATEGORIES.push(c); });
+    }
+    save();
+    closeImport();
+    render();
+    const btn = document.getElementById("import-btn");
+    const orig = btn.textContent;
+    btn.textContent = "✓ IMPORTED!";
+    btn.style.color = "#1d7a57";
+    btn.style.borderColor = "#1d7a57";
+    setTimeout(() => { btn.textContent = orig; btn.style.color = "#888"; btn.style.borderColor = "#d8d3ca"; }, 2000);
+  } catch {
+    alert("Couldn't read that data — make sure you pasted the full export without changes.");
+  }
 }
 
 load();
