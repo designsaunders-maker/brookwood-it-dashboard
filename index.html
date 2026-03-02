@@ -190,6 +190,21 @@
   </div>
 </div>
 
+<!-- Floating notes button -->
+<button id="notes-fab" onclick="toggleNotes()" style="position:fixed;bottom:24px;right:24px;width:48px;height:48px;border-radius:50%;background:#c0622f;border:none;color:#fff;font-size:22px;cursor:pointer;box-shadow:0 4px 16px rgba(192,98,47,0.4);z-index:90;display:flex;align-items:center;justify-content:center;transition:transform 0.15s,box-shadow 0.15s;" onmouseover="this.style.transform='scale(1.08)';this.style.boxShadow='0 6px 20px rgba(192,98,47,0.5)'" onmouseout="this.style.transform='scale(1)';this.style.boxShadow='0 4px 16px rgba(192,98,47,0.4)'">✏️</button>
+
+<!-- Notes panel -->
+<div id="notes-panel" style="display:none;position:fixed;bottom:84px;right:24px;width:320px;max-width:calc(100vw - 48px);background:#fff;border-radius:12px;box-shadow:0 8px 32px rgba(0,0,0,0.15);z-index:89;overflow:hidden;flex-direction:column;">
+  <div style="padding:14px 16px 10px;border-bottom:1px solid #e0dbd2;display:flex;justify-content:space-between;align-items:center;">
+    <span style="font-family:'Syne',sans-serif;font-size:13px;font-weight:800;color:#1a1a1a;">Quick Notes</span>
+    <span id="notes-saved" style="font-size:10px;color:#bbb;letter-spacing:0.03em;"></span>
+  </div>
+  <textarea id="notes-text" placeholder="Dictate or type anything... ideas, reminders, follow-ups." style="width:100%;height:220px;border:none;padding:14px 16px;font-family:'DM Mono',monospace;font-size:12px;color:#333;line-height:1.6;resize:none;outline:none;background:#fff;"></textarea>
+  <div style="padding:10px 16px;border-top:1px solid #f0ede8;display:flex;justify-content:flex-end;">
+    <button onclick="clearNotes()" style="background:none;border:none;color:#ccc;font-size:10px;font-family:inherit;cursor:pointer;letter-spacing:0.04em;transition:color 0.15s;" onmouseover="this.style.color='#e05555'" onmouseout="this.style.color='#ccc'">CLEAR</button>
+  </div>
+</div>
+
 <script>
 const QUOTES = [
   ["The art of teaching is the art of assisting discovery.", "Mark Van Doren"],
@@ -256,12 +271,13 @@ const QUOTES = [
 ];
 
 const CATEGORIES_DEFAULT = [
-  { id: "meetings",       label: "Tech Meeting Notes",  icon: "◈", color: "#E8924B" },
-  { id: "planning",       label: "Tech Planning Docs",  icon: "◉", color: "#3BAA8F" },
-  { id: "curriculum",     label: "Curriculum Review",   icon: "◐", color: "#8B6FD4" },
-  { id: "infrastructure", label: "Infrastructure",      icon: "◼", color: "#4A90D9" },
-  { id: "partners",       label: "Partner Docs",        icon: "◆", color: "#D95F5F" },
-  { id: "support",        label: "Support",             icon: "◎", color: "#c0622f" },
+  { id: "meetings",       label: "Tech Meeting Notes",      icon: "◈", color: "#E8924B" },
+  { id: "planning",       label: "IT Planning",             icon: "◉", color: "#3BAA8F" },
+  { id: "acadtech",       label: "Academic Tech Planning",  icon: "◇", color: "#3B8FAA" },
+  { id: "curriculum",     label: "Curriculum Review",       icon: "◐", color: "#8B6FD4" },
+  { id: "infrastructure", label: "Infrastructure",          icon: "◼", color: "#4A90D9" },
+  { id: "partners",       label: "Partner Docs",            icon: "◆", color: "#D95F5F" },
+  { id: "support",        label: "Support",                 icon: "◎", color: "#c0622f" },
 ];
 let CATEGORIES = [...CATEGORIES_DEFAULT];
 
@@ -703,6 +719,43 @@ function doImport() {
     alert("Couldn't read that data — make sure you pasted the full export without changes.");
   }
 }
+
+// Notes
+const NOTES_KEY = "brookwood-it-notes";
+let notesTimeout = null;
+
+function toggleNotes() {
+  const panel = document.getElementById("notes-panel");
+  const isOpen = panel.style.display === "flex";
+  panel.style.display = isOpen ? "none" : "flex";
+  if (!isOpen) {
+    const ta = document.getElementById("notes-text");
+    ta.value = localStorage.getItem(NOTES_KEY) || "";
+    ta.focus();
+    ta.setSelectionRange(ta.value.length, ta.value.length);
+  }
+}
+
+function clearNotes() {
+  if (!confirm("Clear all notes?")) return;
+  document.getElementById("notes-text").value = "";
+  localStorage.removeItem(NOTES_KEY);
+  document.getElementById("notes-saved").textContent = "Cleared";
+  setTimeout(() => { document.getElementById("notes-saved").textContent = ""; }, 2000);
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+  const ta = document.getElementById("notes-text");
+  ta.addEventListener("input", () => {
+    clearTimeout(notesTimeout);
+    document.getElementById("notes-saved").textContent = "Saving...";
+    notesTimeout = setTimeout(() => {
+      localStorage.setItem(NOTES_KEY, ta.value);
+      document.getElementById("notes-saved").textContent = "Saved";
+      setTimeout(() => { document.getElementById("notes-saved").textContent = ""; }, 1500);
+    }, 600);
+  });
+});
 
 load();
 setDate();
