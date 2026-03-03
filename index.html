@@ -5,7 +5,19 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Brookwood / IT Dashboard</title>
   <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Syne:wght@700;800&family=Lora:ital@1&family=Plus+Jakarta+Sans:wght@600;700&display=swap" rel="stylesheet" />
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <style>
+    #loading-overlay { position:fixed;inset:0;background:#f4f1ec;display:flex;align-items:center;justify-content:center;z-index:200;transition:opacity 0.3s; }
+    #loading-overlay.hidden { opacity:0;pointer-events:none; }
+    .loading-dots { margin-top:14px;display:flex;gap:6px;justify-content:center; }
+    .loading-dots div { width:7px;height:7px;border-radius:50%;background:#c0622f;animation:ldots 1.2s infinite; }
+    .loading-dots div:nth-child(2) { animation-delay:0.2s; }
+    .loading-dots div:nth-child(3) { animation-delay:0.4s; }
+    @keyframes ldots { 0%,80%,100%{opacity:0.2;transform:scale(0.8)} 40%{opacity:1;transform:scale(1)} }
+    #sync-status { font-size:10px;letter-spacing:0.04em;color:#bbb; }
+    #sync-status.saving { color:#E8924B; }
+    #sync-status.saved  { color:#1d7a57; }
+    #sync-status.error  { color:#e05555; }
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { background: #f4f1ec; color: #1a1a1a; font-family: 'DM Mono', 'Courier New', monospace; min-height: 100vh; }
     a { text-decoration: none; }
@@ -153,6 +165,13 @@
 </head>
 <body>
 
+<div id="loading-overlay">
+  <div style="text-align:center;">
+    <div style="font-family:'Syne',sans-serif;font-size:20px;font-weight:800;color:#1a1a1a;">BROOKWOOD <span style="color:#c0622f;">/ IT</span></div>
+    <div class="loading-dots"><div></div><div></div><div></div></div>
+  </div>
+</div>
+
 <div id="header">
   <div id="header-left">
     <div id="title">BROOKWOOD <span>/ IT</span></div>
@@ -171,23 +190,8 @@
 
 <div id="footer">
   <span id="doc-count"></span>
-  <div style="display:flex;gap:8px;align-items:center;">
-    <button id="export-btn" onclick="exportData()" style="background:none;border:1px solid #d8d3ca;color:#888;padding:4px 12px;border-radius:20px;font-family:inherit;font-size:10px;font-weight:700;letter-spacing:0.05em;cursor:pointer;transition:all 0.15s;" onmouseover="this.style.borderColor='#aaa';this.style.color='#555'" onmouseout="this.style.borderColor='#d8d3ca';this.style.color='#888'">↑ EXPORT</button>
-    <button id="import-btn" onclick="showImport()" style="background:none;border:1px solid #d8d3ca;color:#888;padding:4px 12px;border-radius:20px;font-family:inherit;font-size:10px;font-weight:700;letter-spacing:0.05em;cursor:pointer;transition:all 0.15s;" onmouseover="this.style.borderColor='#aaa';this.style.color='#555'" onmouseout="this.style.borderColor='#d8d3ca';this.style.color='#888'">↓ IMPORT</button>
-  </div>
+  <span id="sync-status"></span>
   <span>DRAG HEADER TO REORDER COLUMNS · DRAG CARD TO REORDER · CLICK EDIT TO UPDATE</span>
-</div>
-
-<div id="import-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.3);z-index:100;align-items:center;justify-content:center;">
-  <div style="background:#fff;border-radius:12px;padding:24px;width:480px;max-width:90vw;box-shadow:0 8px 32px rgba(0,0,0,0.15);">
-    <div style="font-family:'Syne',sans-serif;font-size:16px;font-weight:800;margin-bottom:8px;">Import Data</div>
-    <div style="font-size:12px;color:#888;margin-bottom:12px;line-height:1.5;">Paste your exported data below. This will <strong>replace</strong> all current cards and column order.</div>
-    <textarea id="import-text" style="width:100%;height:120px;background:#f9f7f4;border:1px solid #e0dbd2;border-radius:6px;padding:10px;font-family:inherit;font-size:11px;color:#444;resize:none;outline:none;" placeholder="Paste exported data here..."></textarea>
-    <div style="display:flex;gap:8px;margin-top:12px;">
-      <button onclick="doImport()" style="flex:1;background:#c0622f;color:#fff;border:none;padding:9px;border-radius:6px;font-family:inherit;font-weight:700;font-size:12px;cursor:pointer;">Import & Replace</button>
-      <button onclick="closeImport()" style="background:#f0ede8;color:#888;border:1px solid #e0dbd2;padding:9px 16px;border-radius:6px;font-family:inherit;font-size:12px;cursor:pointer;">Cancel</button>
-    </div>
-  </div>
 </div>
 
 <!-- Floating notes button -->
@@ -314,27 +318,80 @@ const DEFAULT_DOCS = [
 ];
 
 const STORAGE_KEY = "brookwood-it-dashboard";
+const SUPABASE_URL = "https://wouagdrnrcycqoxzgdnk.supabase.co";
+const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndvdWFnZHJucmN5Y3FveHpnZG5rIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI1NTI5NTcsImV4cCI6MjA4ODEyODk1N30.cVdi4s5HcwzNmuYfB15jA8JdJfyvQBX5JYfcKbs9Mjk";
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
 let docs = [];
 let filterStatus = "All";
+let saveTimeout = null;
 
-function load() {
+function setSyncStatus(status) {
+  const el = document.getElementById("sync-status");
+  el.className = status;
+  if (status === "saving") el.textContent = "↑ SYNCING...";
+  else if (status === "saved") el.textContent = "✓ SYNCED";
+  else if (status === "error") el.textContent = "⚠ SYNC FAILED";
+  else el.textContent = "";
+}
+
+async function load() {
   try {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    docs = saved ? JSON.parse(saved) : JSON.parse(JSON.stringify(DEFAULT_DOCS));
-  } catch { docs = JSON.parse(JSON.stringify(DEFAULT_DOCS)); }
-  try {
-    const savedCols = localStorage.getItem(STORAGE_KEY + "-cols");
-    if (savedCols) {
-      const order = JSON.parse(savedCols);
+    const { data, error } = await sb.from("settings").select("key,value");
+    if (error) throw error;
+    const rows = {};
+    (data || []).forEach(r => rows[r.key] = r.value);
+    docs = rows.docs || JSON.parse(JSON.stringify(DEFAULT_DOCS));
+    if (rows.colOrder) {
+      const order = rows.colOrder;
       CATEGORIES = order.map(id => CATEGORIES_DEFAULT.find(c => c.id === id)).filter(Boolean);
       CATEGORIES_DEFAULT.forEach(c => { if (!CATEGORIES.find(x => x.id === c.id)) CATEGORIES.push(c); });
     }
-  } catch {}
+    window._cloudNotes = rows.notes ? (rows.notes.text || "") : "";
+  } catch(e) {
+    console.warn("Supabase load failed, falling back to localStorage", e);
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      docs = saved ? JSON.parse(saved) : JSON.parse(JSON.stringify(DEFAULT_DOCS));
+    } catch { docs = JSON.parse(JSON.stringify(DEFAULT_DOCS)); }
+    try {
+      const savedCols = localStorage.getItem(STORAGE_KEY + "-cols");
+      if (savedCols) {
+        const order = JSON.parse(savedCols);
+        CATEGORIES = order.map(id => CATEGORIES_DEFAULT.find(c => c.id === id)).filter(Boolean);
+        CATEGORIES_DEFAULT.forEach(c => { if (!CATEGORIES.find(x => x.id === c.id)) CATEGORIES.push(c); });
+      }
+    } catch {}
+    window._cloudNotes = localStorage.getItem("brookwood-it-notes") || "";
+  }
 }
 
 function save() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(docs));
   localStorage.setItem(STORAGE_KEY + "-cols", JSON.stringify(CATEGORIES.map(c => c.id)));
+  clearTimeout(saveTimeout);
+  setSyncStatus("saving");
+  saveTimeout = setTimeout(async () => {
+    try {
+      const { error } = await sb.from("settings").upsert([
+        { key: "docs",     value: docs },
+        { key: "colOrder", value: CATEGORIES.map(c => c.id) }
+      ]);
+      if (error) throw error;
+      setSyncStatus("saved");
+      setTimeout(() => setSyncStatus(""), 2000);
+    } catch(e) {
+      console.error("Cloud save failed", e);
+      setSyncStatus("error");
+    }
+  }, 800);
+}
+
+async function saveNotes(text) {
+  localStorage.setItem("brookwood-it-notes", text);
+  try {
+    await sb.from("settings").upsert({ key: "notes", value: { text } });
+  } catch(e) { console.warn("Notes cloud save failed", e); }
 }
 
 function setDate() {
@@ -721,47 +778,52 @@ function doImport() {
 }
 
 // Notes
-const NOTES_KEY = "brookwood-it-notes";
 let notesTimeout = null;
 
-function toggleNotes() {
+async function toggleNotes() {
   const panel = document.getElementById("notes-panel");
   const isOpen = panel.style.display === "flex";
   panel.style.display = isOpen ? "none" : "flex";
   if (!isOpen) {
     const ta = document.getElementById("notes-text");
-    ta.value = localStorage.getItem(NOTES_KEY) || "";
+    ta.value = window._cloudNotes || localStorage.getItem("brookwood-it-notes") || "";
     ta.focus();
     ta.setSelectionRange(ta.value.length, ta.value.length);
   }
 }
 
-function clearNotes() {
+async function clearNotes() {
   if (!confirm("Clear all notes?")) return;
   document.getElementById("notes-text").value = "";
-  localStorage.removeItem(NOTES_KEY);
+  window._cloudNotes = "";
+  await saveNotes("");
   document.getElementById("notes-saved").textContent = "Cleared";
   setTimeout(() => { document.getElementById("notes-saved").textContent = ""; }, 2000);
 }
 
-document.addEventListener("DOMContentLoaded", () => {
+async function init() {
+  await load();
+  setDate();
+  setQuote();
+  buildFilters();
+  render();
+  const overlay = document.getElementById("loading-overlay");
+  overlay.classList.add("hidden");
+  setTimeout(() => overlay.style.display = "none", 300);
   const ta = document.getElementById("notes-text");
   ta.addEventListener("input", () => {
     clearTimeout(notesTimeout);
     document.getElementById("notes-saved").textContent = "Saving...";
-    notesTimeout = setTimeout(() => {
-      localStorage.setItem(NOTES_KEY, ta.value);
+    notesTimeout = setTimeout(async () => {
+      window._cloudNotes = ta.value;
+      await saveNotes(ta.value);
       document.getElementById("notes-saved").textContent = "Saved";
       setTimeout(() => { document.getElementById("notes-saved").textContent = ""; }, 1500);
-    }, 600);
+    }, 800);
   });
-});
+}
 
-load();
-setDate();
-setQuote();
-buildFilters();
-render();
+init();
 </script>
 </body>
 </html>
